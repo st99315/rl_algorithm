@@ -4,6 +4,7 @@ State-Value Function
 Written by Patrick Coady (pat-coady.github.io)
 """
 
+import os
 import tensorflow as tf
 import numpy as np
 from sklearn.utils import shuffle
@@ -11,7 +12,7 @@ from sklearn.utils import shuffle
 
 class NNValueFunction(object):
     """ NN-based state-value function """
-    def __init__(self, obs_dim, hid1_mult):
+    def __init__(self, obs_dim, hid1_mult, load=False, path=None):
         """
         Args:
             obs_dim: number of dimensions in observation vector (int)
@@ -24,13 +25,24 @@ class NNValueFunction(object):
         self.epochs = 10
         self.lr = None  # learning rate set in _build_graph()
         self._build_graph()
-        self.sess = tf.Session(graph=self.g)
+
+        config = tf.ConfigProto(log_device_placement=False)
+        config.gpu_options.per_process_gpu_memory_fraction = 0.4
+        self.sess = tf.Session(graph=self.g, config=config)
         self.sess.run(self.init)
+
+        self.trained_episode = 0
+        if load:
+            _path = os.path.split(path)
+            self.trained_episode = int(_path[-1].split('.')[-2])
+            self.saver.restore(self.sess, path)
+            print("Value model restored.")
 
     def _build_graph(self):
         """ Construct TensorFlow graph, including loss function, init op and train op """
         self.g = tf.Graph()
         with self.g.as_default():
+
             self.obs_ph = tf.placeholder(tf.float32, (None, self.obs_dim), 'obs_valfunc')
             self.val_ph = tf.placeholder(tf.float32, (None,), 'val_valfunc')
 
@@ -43,27 +55,28 @@ class NNValueFunction(object):
             self.lr = 1e-2 / np.sqrt(hid2_size)  # 1e-3 empirically determined
 
             print('Value Params -- h1: {}, h2: {}, h3: {}, lr: {:.3g}'
-                  .format(hid1_size, hid2_size, hid3_size, self.lr))
+                .format(hid1_size, hid2_size, hid3_size, self.lr))
 
             # 3 hidden layers with tanh activations
             out = tf.layers.dense(self.obs_ph, hid1_size, tf.tanh,
-                                  kernel_initializer=tf.random_normal_initializer(
-                                      stddev=np.sqrt(1 / self.obs_dim)), name="h1")
+                                kernel_initializer=tf.random_normal_initializer(
+                                    stddev=np.sqrt(1 / self.obs_dim)), name="h1")
             out = tf.layers.dense(out, hid2_size, tf.tanh,
-                                  kernel_initializer=tf.random_normal_initializer(
-                                      stddev=np.sqrt(1 / hid1_size)), name="h2")
+                                kernel_initializer=tf.random_normal_initializer(
+                                    stddev=np.sqrt(1 / hid1_size)), name="h2")
             out = tf.layers.dense(out, hid3_size, tf.tanh,
-                                  kernel_initializer=tf.random_normal_initializer(
-                                      stddev=np.sqrt(1 / hid2_size)), name="h3")
+                                kernel_initializer=tf.random_normal_initializer(
+                                    stddev=np.sqrt(1 / hid2_size)), name="h3")
             out = tf.layers.dense(out, 1,
-                                  kernel_initializer=tf.random_normal_initializer(
-                                      stddev=np.sqrt(1 / hid3_size)), name='output')
+                                kernel_initializer=tf.random_normal_initializer(
+                                    stddev=np.sqrt(1 / hid3_size)), name='output')
 
             self.out = tf.squeeze(out)
             self.loss = tf.reduce_mean(tf.square(self.out - self.val_ph))  # squared loss
             optimizer = tf.train.AdamOptimizer(self.lr)
             self.train_op = optimizer.minimize(self.loss)
             self.init = tf.global_variables_initializer()
+            self.saver = tf.train.Saver()
 
     def fit(self, x, y, logger):
         """ Fit model to current data batch + previous data batch
@@ -110,3 +123,8 @@ class NNValueFunction(object):
     def close_sess(self):
         """ Close TensorFlow session """
         self.sess.close()
+
+    def save_parameter(self, directory, episode):
+        # Save the variables to disk.
+        save_path = self.saver.save(self.sess, os.path.join(directory, 'value.{}.ckpt'.format(episode)))
+        print("Model saved in path: {}".format(save_path))

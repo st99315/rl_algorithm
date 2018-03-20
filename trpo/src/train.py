@@ -42,7 +42,8 @@ from policy import Policy
 from value_function import NNValueFunction
 from utils import Logger, Scaler
 
-from OpenGL import GL
+import tensorflow as tf
+
 
 class GracefulKiller:
     """ Gracefully exit program on CTRL-C """
@@ -101,9 +102,7 @@ def run_episode(env, policy, scaler, animate=False):
 
     while not done:
         if animate:
-            obs = env.render()
-            # print(obs)
-            # input()
+            env.render()
 
         obs = obs.astype(np.float32).reshape((1, -1))
         obs = np.append(obs, [[step]], axis=1)  # add time step feature
@@ -273,7 +272,7 @@ def log_batch_stats(observes, actions, advantages, disc_sum_rew, logger, episode
                 })
 
 
-def main(env_name, num_episodes, gamma, lam, kl_targ, batch_size, hid1_mult, policy_logvar, display):
+def main(env_name, num_episodes, gamma, lam, kl_targ, batch_size, hid1_mult, policy_logvar, display, load, directory, load_episodes):
     """ Main training loop
 
     Args:
@@ -300,14 +299,15 @@ def main(env_name, num_episodes, gamma, lam, kl_targ, batch_size, hid1_mult, pol
         env = wrappers.Monitor(env, aigym_path, force=True)
 
     # creating useful object
-    scaler = Scaler(obs_dim)
-    val_func = NNValueFunction(obs_dim, hid1_mult)
-    policy = Policy(obs_dim, act_dim, kl_targ, hid1_mult, policy_logvar)
+    scaler = Scaler(obs_dim, load, os.path.join(directory, 'scaler.{}.pkl'.format(load_episodes)))
+    val_func = NNValueFunction(obs_dim, hid1_mult, load, os.path.join(directory, 'value.{}.ckpt'.format(load_episodes)))
+    policy = Policy(obs_dim, act_dim, kl_targ, hid1_mult, policy_logvar, load, os.path.join(directory, 'policy.{}.ckpt'.format(load_episodes)))
 
     # run a few episodes of untrained policy to initialize scaler:
-    run_policy(env, policy, scaler, logger, episodes=5, display=display)
+    run_policy(env, policy, scaler, logger, episodes=5, display=False)
 
-    episode = 0
+    episode = load_episodes # 0
+    print('Now episode {}'.format(episode))
     while episode < num_episodes:
         trajectories = run_policy(env, policy, scaler, logger, episodes=batch_size, display=display)
 
@@ -326,6 +326,11 @@ def main(env_name, num_episodes, gamma, lam, kl_targ, batch_size, hid1_mult, pol
         val_func.fit(observes, disc_sum_rew, logger)  # update value function
         logger.write(display=True)  # write logger results to file and stdout
 
+        if not(episode % 2000):
+            val_func.save_parameter(aigym_path, episode)
+            policy.save_parameter(aigym_path, episode)
+            scaler.save_parameter(aigym_path, episode)
+
         if killer.kill_now:
             if input('Terminate training (y/[n])? ') == 'y':
                 break
@@ -341,7 +346,7 @@ if __name__ == "__main__":
                                                   'using Proximal Policy Optimizer'))
     parser.add_argument('env_name', type=str, help='OpenAI Gym environment name')
     parser.add_argument('-n', '--num_episodes', type=int, help='Number of episodes to run',
-                        default=1000)
+                        default=100000)
     parser.add_argument('-g', '--gamma', type=float, help='Discount factor', default=0.995)
     parser.add_argument('-l', '--lam', type=float, help='Lambda for Generalized Advantage Estimation',
                         default=0.98)
@@ -349,7 +354,7 @@ if __name__ == "__main__":
                         default=0.003)
     parser.add_argument('-b', '--batch_size', type=int,
                         help='Number of episodes per training batch',
-                        default=20)
+                        default=50)
     parser.add_argument('-m', '--hid1_mult', type=int,
                         help='Size of first hidden layer for value and policy NNs'
                              '(integer multiplier of observation dimension)',
@@ -360,6 +365,15 @@ if __name__ == "__main__":
     parser.add_argument('-d', '--display', type=bool,
                         help='Display robot and environment',
                         default=False)
+    parser.add_argument('-ld', '--load', type=bool,
+                        help='Load trained parameter',
+                        default=False)
+    parser.add_argument('-dir', '--directory', type=str,
+                        help='Directory of ckpt',
+                        default='')
+    parser.add_argument('-ln', '--load_episodes', type=int,
+                        help='Load which episode of ckpt',
+                        default=0)
 
     args = parser.parse_args()
     main(**vars(args))

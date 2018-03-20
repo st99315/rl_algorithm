@@ -8,6 +8,7 @@ import os
 import shutil
 import glob
 import csv
+import pickle
 
 
 class Scaler(object):
@@ -17,16 +18,42 @@ class Scaler(object):
         scale = 1 / (stddev + 0.1) / 3 (i.e. 3x stddev = +/- 1.0)
     """
 
-    def __init__(self, obs_dim):
+    def __init__(self, obs_dim, load=False, path=None):
         """
         Args:
             obs_dim: dimension of axis=1
         """
-        self.vars = np.zeros(obs_dim)
-        self.means = np.zeros(obs_dim)
-        self.m = 0
-        self.n = 0
-        self.first_pass = True
+
+        if load:
+            self.restore_parameter(path)
+            print("Scaler parameter restored.")
+            self.first_pass = False
+        else:
+            self.vars  = np.zeros(obs_dim)
+            self.means = np.zeros(obs_dim)
+            self.m     = 0
+            # self.n = 0
+            self.first_pass = True
+
+    def restore_parameter(self, path):
+        # reload a file to a variable
+        with open(path, 'rb') as file:
+            parameter = pickle.load(file)
+
+        self.vars  = parameter['vars']
+        self.means = parameter['means']
+        self.m     = parameter['m']
+
+    def save_parameter(self, directory, episode):
+        # Save the variables to disk.
+        parameter = {'vars': self.vars, 'means': self.means, 'm': self.m}
+
+        # pickle a variable to a file
+        save_path = os.path.join(directory, 'scaler.{}.pkl'.format(episode))
+        with open(save_path, 'wb') as file:
+            pickle.dump(parameter, file)
+
+        print("Model saved in path: {}".format(save_path))
 
     def update(self, x):
         """ Update running mean and variance (this is an exact method)
@@ -82,6 +109,7 @@ class Logger(object):
     def write(self, display=True):
         """ Write 1 log entry to file, and optionally to stdout
         Log fields preceded by '_' will not be printed to stdout
+tf.get_variable('var_name',initializer=init)
 
         Args:
             display: boolean, print to stdout

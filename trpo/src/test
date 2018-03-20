@@ -1,0 +1,4 @@
+#!/bin/bash
+ 
+source ~/rl_env/bin/activate
+python train.py RoboschoolReacher3d6-v1 -dir ~/RoboschoolReacher3d6-v1/Mar-19_08:37:37 -ld True -ln 72000

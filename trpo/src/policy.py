@@ -3,13 +3,15 @@ NN Policy with KL Divergence Constraint (PPO / TRPO)
 
 Written by Patrick Coady (pat-coady.github.io)
 """
+
+import os
 import numpy as np
 import tensorflow as tf
 
 
 class Policy(object):
     """ NN-based policy approximation """
-    def __init__(self, obs_dim, act_dim, kl_targ, hid1_mult, policy_logvar):
+    def __init__(self, obs_dim, act_dim, kl_targ, hid1_mult, policy_logvar, load=False, path=None):
         """
         Args:
             obs_dim: num observation dimensions (int)
@@ -33,10 +35,18 @@ class Policy(object):
         self._build_graph()
         self._init_session()
 
+        self.trained_episode = 0
+        if load:
+            _path = os.path.split(path)
+            self.trained_episode = int(_path[-1].split('.')[-2])
+            self.saver.restore(self.sess, path)
+            print("Policy model restored.")
+
     def _build_graph(self):
         """ Build and initialize TensorFlow graph """
         self.g = tf.Graph()
         with self.g.as_default():
+
             self._placeholders()
             self._policy_nn()
             self._logprob()
@@ -44,6 +54,7 @@ class Policy(object):
             self._sample()
             self._loss_train_op()
             self.init = tf.global_variables_initializer()
+            self.saver = tf.train.Saver()
 
     def _placeholders(self):
         """ Input placeholders"""
@@ -160,7 +171,10 @@ class Policy(object):
 
     def _init_session(self):
         """Launch TensorFlow session and initialize variables"""
-        self.sess = tf.Session(graph=self.g)
+
+        config = tf.ConfigProto(log_device_placement=False)
+        config.gpu_options.per_process_gpu_memory_fraction = 0.4
+        self.sess = tf.Session(graph=self.g, config=config)
         self.sess.run(self.init)
 
     def sample(self, obs):
@@ -215,3 +229,8 @@ class Policy(object):
     def close_sess(self):
         """ Close TensorFlow session """
         self.sess.close()
+
+    def save_parameter(self, directory, episode):
+        # Save the variables to disk.
+        save_path = self.saver.save(self.sess, os.path.join(directory, 'policy.{}.ckpt'.format(episode)))
+        print("Model saved in path: {}".format(save_path))

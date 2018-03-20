@@ -1,0 +1,4 @@
+#!/bin/bash
+ 
+source ~/rl_env/bin/activate
+python train.py RoboschoolReacher3d6-v1

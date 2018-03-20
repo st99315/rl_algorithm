@@ -22,13 +22,11 @@ import gym, roboschool
 ENV_MAME = 'RoboschoolReacher3d6-v1'
 
 EP_MAX = 200000
-EP_LEN = 400
-BATCH = 100
-
+EP_LEN = 500
 GAMMA = 0.9
 A_LR = 0.0001
 C_LR = 0.0002
-
+BATCH = 50
 A_UPDATE_STEPS = 10
 C_UPDATE_STEPS = 10
 
@@ -158,10 +156,14 @@ for ep in range(EP_MAX):
     buffer_s, buffer_a, buffer_r = [], [], []
     ep_r = 0
     for t in range(EP_LEN):    # in one episode
-        if ep > EP_MAX/2:
-            env.render()
-            
-        a = ppo.choose_action(s)
+        env.render()
+        # a = ppo.choose_action(s)
+        if t < EP_LEN:
+            a = np.array([-2, 0,0,0,0,0])
+        else:
+            a = np.array([0, 0,0,0,0,0])
+        print(a)
+
         s_, r, done, _ = env.step(a)
         buffer_s.append(s)
         buffer_a.append(a)
@@ -169,33 +171,33 @@ for ep in range(EP_MAX):
         s = s_
         ep_r += r
 
-        # update ppo
-        if (t+1) % BATCH == 0 or t == EP_LEN-1:
-            v_s_ = ppo.get_v(s_)
-            discounted_r = []
-            for r in buffer_r[::-1]:
-                v_s_ = r + GAMMA * v_s_
-                discounted_r.append(v_s_)
-            discounted_r.reverse()
+#         # update ppo
+#         if (t+1) % BATCH == 0 or t == EP_LEN-1:
+#             v_s_ = ppo.get_v(s_)
+#             discounted_r = []
+#             for r in buffer_r[::-1]:
+#                 v_s_ = r + GAMMA * v_s_
+#                 discounted_r.append(v_s_)
+#             discounted_r.reverse()
 
-            bs, ba, br = np.vstack(buffer_s), np.vstack(buffer_a), np.array(discounted_r)[:, np.newaxis]
-            buffer_s, buffer_a, buffer_r = [], [], []
-            ppo.update(bs, ba, br)
+#             bs, ba, br = np.vstack(buffer_s), np.vstack(buffer_a), np.array(discounted_r)[:, np.newaxis]
+#             buffer_s, buffer_a, buffer_r = [], [], []
+#             ppo.update(bs, ba, br)
 
-    if ep == 0:
-        all_ep_r.append(ep_r)
-    else:
-        all_ep_r.append(all_ep_r[-1]*0.9 + ep_r*0.1)
+#     if ep == 0:
+#         all_ep_r.append(ep_r)
+#     else:
+#         all_ep_r.append(all_ep_r[-1]*0.9 + ep_r*0.1)
 
-    if ep % BATCH == 0 or ep == EP_MAX-1:
-        print(
-            'Ep: %i' % ep,
-            "|Ep_r: %i" % ep_r,
-            ("|Lam: %.4f" % METHOD['lam']) if METHOD['name'] == 'kl_pen' else '',
-        )
+#     if ep % BATCH == 0 or ep == EP_MAX-1:
+#         print(
+#             'Ep: %i' % ep,
+#             "|Ep_r: %i" % ep_r,
+#             ("|Lam: %.4f" % METHOD['lam']) if METHOD['name'] == 'kl_pen' else '',
+#         )
 
-plt.plot(np.arange(len(all_ep_r)), np.array(all_ep_r))
-plt.xlabel('Episode')
-plt.ylabel('Moving averaged episode reward')
-plt.savefig('{0}_{1}.png'.format(ENV_NAME, EP_MAX), dpi=300, format="png")
-plt.close()
+# plt.plot(np.arange(len(all_ep_r)), np.array(all_ep_r))
+# plt.xlabel('Episode')
+# plt.ylabel('Moving averaged episode reward')
+# plt.savefig('{0}_{1}.png'.format(ENV_NAME, EP_MAX), dpi=300, format="png")
+# plt.close()
